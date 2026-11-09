@@ -115,6 +115,27 @@ curl -s -X POST -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Content-Type: applicatio
 
 **Get usage:** `GET /v1/account/usage` — Returns token usage, funnel count, lead count
 
+## Building a Funnel
+
+Only the AI Chat Landing Page blueprint (id 2) can be built this way. Needs keys with `funnels:build`, `blueprints:read`, `pages:read`, `pages:write` (plus `pages:publish` and `funnels:write` to publish, `knowledge:write` to upload sources).
+
+1. **Fetch the rules, every build.** `GET /v1/page-contract` returns `{version, markdown}`. Read the markdown and follow it for this build; never rely on a copy from an earlier build.
+2. **Read the plan.** `GET /v1/blueprints/2/build-plan` gives the page briefs, required components (`chat_widget`), optional ones (`faq`), chat agent instructions and inputs. A `404` means that blueprint has no build plan.
+3. **Ask the user** clarifying questions before writing anything: the company, offer, audience, tone, whether they want the FAQ, and which website URLs or files to draw on. Upload any files with `POST /v1/knowledge-base/upload`; the URLs it returns are the `sourceUrls`.
+4. **Build.** Send an `Idempotency-Key` header:
+
+```bash
+API="${GTMFUNNELS_API_URL:-https://api.gtmfunnels.ai}"
+curl -s -X POST -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Idempotency-Key: $(uuidgen)" -H "Content-Type: application/json" \
+  -d '{"blueprintId": 2, "name": "Acme Assistant", "websiteUrls": ["https://acme.example"]}' "$API/v1/funnels/build"
+```
+
+   Body: `{blueprintId, name, brandCode?, websiteUrls? (max 10), sourceUrls? (max 20)}`. It returns `201 {funnelCode, status: "draft", pages: [{pageId, name, purposeType}], contractVersion}`. `403` = the org is over its usage limit or the key's user isn't a member; `404` = unknown brand; `422` = the blueprint can't be built by Claude Code yet, or a bad body.
+5. **Write the page** to a local `page.html` following the contract and the brief. The chat widget is exactly `<div data-block="chat_widget"></div>` (lower-case, double quotes, nothing inside, once); the server turns it into the widget. An optional FAQ uses `.faq-container` (or `#faqAccordion`) > `.faq-item` > `.faq-question` + `.faq-answer`. No scripts, forms or external stylesheets, except Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`, https, written plainly). Colours and fonts go through the `:root` `--t-*` block defined as `var(--gtm-*, fallback)`.
+6. **Draft.** `GET /v1/funnels/{code}/pages/{pageId}` for the current `revision`, then `PUT /v1/funnels/{code}/pages/{pageId}/draft` with `{html, baseRevision}` as in "Editing a Page". `422 validation_failed` lists problems in `details[]` (`msg`, `line`): fix every one and send the draft again. `409` means the page changed: read it again and retry.
+7. **Preview.** Give the user the `previewUrl`. Iterate on their feedback with new drafts.
+8. **Publish only when the user asks.** Then `POST /v1/funnels/{code}/pages/{pageId}/publish`, and `POST /v1/funnels/{code}/publish` to make the funnel live. Never publish on your own.
+
 ## Common Workflows
 
 1. **Generate a funnel:** List blueprints → pick one → call generate with `returnUrl: true` → get the published URL
