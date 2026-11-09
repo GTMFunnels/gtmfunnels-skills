@@ -5,7 +5,7 @@ Pre-built skills for integrating GTMFunnels with AI agent platforms.
 ## Available Skills
 
 ### `/claude` — Claude Code Skill
-A Claude Code custom skill that gives Claude access to the GTMFunnels API. Claude can list funnels, generate landing pages, manage leads, query knowledge bases, and configure chat widgets — all through natural conversation.
+A Claude Code custom skill that gives Claude access to the GTMFunnels API. Claude can list funnels, generate landing pages, edit and fix existing pages (draft, preview, publish, restore), manage leads, query knowledge bases, and configure chat widgets — all through natural conversation.
 
 **Setup:** See [claude/README.md](claude/README.md)
 

@@ -1,6 +1,6 @@
 ---
 name: gtmfunnels
-description: Manage GTMFunnels marketing funnels, leads, AI chatbots, knowledge base, and workflows via the Developer API.
+description: Manage GTMFunnels marketing funnels, leads, AI chatbots, knowledge base and workflows via the Developer API, and edit a funnel's pages (draft, preview, publish, restore).
 metadata.openclaw: {"emoji":"🚀","requires":{"env":["GTMFUNNELS_API_KEY"]}}
 ---
 
@@ -43,6 +43,19 @@ curl -s -H "X-API-KEY: $GTMFUNNELS_API_KEY" "${GTMFUNNELS_API_URL:-https://api.g
 **Delete funnel:** `DELETE /v1/funnels/{funnelCode}`
 
 **Publish/Unpublish:** `POST /v1/funnels/{funnelCode}/publish` | `POST /v1/funnels/{funnelCode}/unpublish`
+
+### Pages
+
+Scopes: `pages:read`, `pages:write`, `pages:publish`. The live page changes only on publish.
+
+- `GET /v1/funnels/{funnelCode}/pages`: the editable pages, with `pageId` and `revision`
+- `GET /v1/funnels/{funnelCode}/pages/{pageId}`: one page with its live `html` and `revision`
+- `PUT /v1/funnels/{funnelCode}/pages/{pageId}/draft`: body `{html, baseRevision}`; returns a `previewUrl` (valid 7 days) and `warnings`
+- `GET` / `DELETE /v1/funnels/{funnelCode}/pages/{pageId}/draft`: read or discard the draft
+- `POST /v1/funnels/{funnelCode}/pages/{pageId}/publish`: make the draft live. Only when the user asks.
+- `GET /v1/funnels/{funnelCode}/pages/{pageId}/history`, `POST .../restore` with `{revision}`: go back to an earlier version
+
+A draft is refused (`422`, with a `line` for each problem) if it adds code the live page doesn't have (`<script>` except JSON-LD, `<iframe>`, `on*` attributes, `<link>`, `javascript:` URLs and similar), removes the lead form (`<div id="form-section">`), adds new `{{name}}` placeholders, or uses an asset id that isn't a number from `GET /v1/assets`. `409` means the page changed: pull it again and redo the edit. Leads submitted from a preview are real.
 
 ### Leads
 
