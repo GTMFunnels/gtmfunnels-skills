@@ -47,7 +47,7 @@ The funnel's lead-capture form: fields, button text, disclaimer, colours, look a
 
 ### Pages
 
-Edit the HTML of a funnel's pages. The live page changes only on publish, and earlier versions stay in the history. Scopes: `pages:read`, `pages:write` (drafts, adding a step), `pages:publish` (publish and restore). Page routes take `?version=N` to work on the newest unpublished version.
+Edit the HTML of a funnel's pages. The live page changes only on publish, and earlier versions stay in the history. Scopes: `pages:read`, `pages:write` (drafts, adding a step), `pages:publish` (publish and restore). The list, get and draft page routes take `?version=N` to work on the newest unpublished version (page publish does not: publish the version).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -173,7 +173,7 @@ A draft that breaks a rule is refused with `422 validation_failed`. Every proble
 
 ### Adding a step, versions and publishing a version
 
-Do these only when the user asks. `POST /v1/funnels/{code}/pages` with `{purposeType: "ChatPage" | "ThankYouPage", name?, position?}` adds a step and returns `{pageId, name, purposeType, version, pending}`. A funnel version has at most one page of each type, and a thank-you page can't be first. A thank-you page goes with a lead form: after adding one, set the form's `redirectType: "step"` and `redirectPageId` to its `pageId` (`PUT .../form`; read `warnings` in the response). On a live funnel the new step goes into an **unpublished version** (`pending: true`): edit its pages by adding `?version=N` to the page routes (list, get, draft, publish; this also works for pages the unpublished version shares with the live one). Preview it, and make it live only when the user asks with `POST /v1/funnels/{code}/publish` and `{"version": N}`, which returns `{status, liveUrl, warnings}`. `409 newer_version_live` or `version_already_live` means nothing to do: tell the user. Publish nothing on your own.
+Do these only when the user asks. `POST /v1/funnels/{code}/pages` with `{purposeType: "ChatPage" | "ThankYouPage", name?, position?}` adds a step and returns `{pageId, name, purposeType, version, pending}`. A funnel version has at most one page of each type, and a thank-you page can't be first. A thank-you page goes with a lead form: after adding one, set the form's `redirectType: "step"` and `redirectPageId` to its `pageId` (`PUT .../form`; read `warnings` in the response). On a live funnel the new step goes into an **unpublished version** (`pending: true`): edit its pages by adding `?version=N` to the page routes (list, get and draft: `GET .../pages?version=N`, `GET`/`PUT .../pages/{pageId}/draft?version=N`; this also works for pages the unpublished version shares with the live one; publishing one such page is refused with `409 in_unpublished_version`: publish the version). Preview it, and make it live only when the user asks with `POST /v1/funnels/{code}/publish` and `{"version": N}`, which returns `{status, liveUrl, warnings}`. `409 newer_version_live` or `version_already_live` means nothing to do: tell the user. Publish nothing on your own.
 
 `POST /v1/funnels/{code}/regenerate` (202) rebuilds a funnel as a new **unpublished version**; the live pages stay as they are. `409 regenerate_running` means one is already running. Poll `GET /v1/funnels/generate/{run_id}` until done; it returns the `version`. Preview it, and publish that version only when asked.
 
