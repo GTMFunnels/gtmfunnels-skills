@@ -47,7 +47,7 @@ The funnel's lead-capture form: fields, button text, disclaimer, colours, look a
 
 ### Pages
 
-Edit the HTML of a funnel's pages. The live page changes only on publish, and earlier versions stay in the history. Scopes: `pages:read`, `pages:write` (drafts), `pages:publish` (publish and restore).
+Edit the HTML of a funnel's pages. The live page changes only on publish, and earlier versions stay in the history. Scopes: `pages:read`, `pages:write` (drafts, adding a step), `pages:publish` (publish and restore). Page routes take `?version=N` to work on the newest unpublished version.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -59,6 +59,9 @@ Edit the HTML of a funnel's pages. The live page changes only on publish, and ea
 | POST | `/v1/funnels/{funnelCode}/pages/{pageId}/publish` | Make the draft live. Optional `Idempotency-Key` header |
 | GET | `/v1/funnels/{funnelCode}/pages/{pageId}/history` | Earlier live versions, newest first: `{items: [{revision, source, publishedBy, publishedAt, replacedAt}]}` |
 | POST | `/v1/funnels/{funnelCode}/pages/{pageId}/restore` | Put an earlier version back live. Body: `{revision}` |
+| POST | `/v1/funnels/{funnelCode}/pages` | Add a step. Body: `{purposeType: "ChatPage"|"ThankYouPage", name?, position?}`. On a live funnel it goes into an unpublished version |
+| POST | `/v1/funnels/{funnelCode}/publish` | Publish a funnel version. Body: `{version}`. Returns `{status, liveUrl, warnings}` |
+| POST | `/v1/funnels/{funnelCode}/regenerate` | Rebuild as a new unpublished version (202). Poll `GET /v1/funnels/generate/{run_id}` for `version` |
 
 ### Leads
 
@@ -168,6 +171,12 @@ A draft that breaks a rule is refused with `422 validation_failed`. Every proble
 
 `409 conflict` means the page changed after you pulled it, or the funnel was regenerated. Pull it again, redo the edit on the new HTML and draft again with the new `revision`.
 
+### Adding a step, versions and publishing a version
+
+Do these only when the user asks. `POST /v1/funnels/{code}/pages` with `{purposeType: "ChatPage" | "ThankYouPage", name?, position?}` adds a step and returns `{pageId, name, purposeType, version, pending}`. A funnel version has at most one page of each type, and a thank-you page can't be first. A thank-you page goes with a lead form: after adding one, set the form's `redirectType: "step"` and `redirectPageId` to its `pageId` (`PUT .../form`; read `warnings` in the response). On a live funnel the new step goes into an **unpublished version** (`pending: true`): edit its pages by adding `?version=N` to the page routes (list, get, draft, publish; this also works for pages the unpublished version shares with the live one). Preview it, and make it live only when the user asks with `POST /v1/funnels/{code}/publish` and `{"version": N}`, which returns `{status, liveUrl, warnings}`. `409 newer_version_live` or `version_already_live` means nothing to do: tell the user. Publish nothing on your own.
+
+`POST /v1/funnels/{code}/regenerate` (202) rebuilds a funnel as a new **unpublished version**; the live pages stay as they are. `409 regenerate_running` means one is already running. Poll `GET /v1/funnels/generate/{run_id}` until done; it returns the `version`. Preview it, and publish that version only when asked.
+
 ### Customise the form
 
 The form's fields and look are settings, not page HTML, so changing them needs no draft. When the user wants different questions, button text or form colours:
@@ -208,7 +217,7 @@ curl -s -X POST -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Idempotency-Key: $(uuidg
 6. **Draft.** `GET /v1/funnels/{code}/pages/{pageId}` for the current `revision`, then `PUT /v1/funnels/{code}/pages/{pageId}/draft` with `{html, baseRevision}` as in "Editing a Page". `422 validation_failed` lists problems in `details[]` (`msg`, `line`): fix every one and send the draft again. `409` means the page changed: read it again and retry.
 7. **Preview.** Give the user the `previewUrl`. Iterate on their feedback with new drafts.
 8. **Customise the form** if the page has one: read it, propose fields, button text and disclaimer to the user, and `PUT` them as in "Customise the form". This saves at once (it is not a draft); say so. It shows on the live site once the funnel is published.
-9. **Publish only when the user asks.** Then `POST /v1/funnels/{code}/pages/{pageId}/publish`, and `POST /v1/funnels/{code}/publish` to make the funnel live. Never publish on your own.
+9. **Publish only when the user asks.** A preview or draft is not a request to publish. Then `POST /v1/funnels/{code}/pages/{pageId}/publish`, and `POST /v1/funnels/{code}/publish` to make the funnel live. Never publish on your own.
 
 ## Common Workflows
 
