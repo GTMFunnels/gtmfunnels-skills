@@ -126,6 +126,8 @@ curl -s -H "X-API-KEY: $GTMFUNNELS_API_KEY" "${GTMFUNNELS_API_URL:-https://api.g
 
 **Get blueprint:** `GET /v1/blueprints/{blueprintId}`
 
+**Talking to the user:** call a blueprint by its name only (for example "AI Chat Landing Page"), in lists, questions, confirmations and summaries. Never show a blueprint id; ids are only for requests.
+
 ### Knowledge Base
 
 **List documents:** `GET /v1/knowledge-base`
@@ -153,10 +155,10 @@ curl -s -X POST -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Content-Type: applicatio
 
 ## Building a Funnel
 
-Only the AI Chat Landing Page blueprint (id 2) can be built this way. Needs keys with `funnels:build`, `blueprints:read`, `pages:read`, `pages:write` (plus `funnels:read` and `funnels:write` for the form, `pages:publish` to publish, `knowledge:write` to upload sources).
+Only the AI Chat Landing Page blueprint can be built this way; find its `id` with `GET /v1/blueprints` and, when you tell the user, name it, never its id. Needs keys with `funnels:build`, `blueprints:read`, `pages:read`, `pages:write` (plus `funnels:read` and `funnels:write` for the form, `pages:publish` to publish, `knowledge:write` to upload sources).
 
 1. **Fetch the rules, every build.** `GET /v1/page-contract` returns `{version, markdown}`. Read the markdown and follow it for this build; never rely on a copy from an earlier build.
-2. **Read the plan.** `GET /v1/blueprints/2/build-plan` gives the page briefs, required components (`chat_widget`), optional ones (`faq`), chat agent instructions and inputs. A `404` means that blueprint has no build plan.
+2. **Read the plan.** `GET /v1/blueprints/{blueprintId}/build-plan` gives the page briefs, required components (`chat_widget`), optional ones (`faq`), chat agent instructions and inputs. A `404` means that blueprint has no build plan.
 3. **Ask the user** clarifying questions before writing anything: the company, offer, audience, tone, whether they want the FAQ, and which website URLs or files to draw on. Upload any files with `POST /v1/knowledge-base/upload`; the URLs it returns are the `sourceUrls`.
 4. **Build.** Send an `Idempotency-Key` header:
 
