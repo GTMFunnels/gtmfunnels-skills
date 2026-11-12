@@ -74,6 +74,24 @@ Edit the HTML of a funnel's pages. The live page changes only on publish, and ea
 | GET | `/v1/funnels/{funnelCode}/leads/export` | Export leads as CSV |
 | POST | `/v1/funnels/{funnelCode}/leads/score` | AI-score leads. Body: `{limit?}` (default 20) |
 
+### Brand from a website, recent leads, analytics, custom domains
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/brands/generate` | Build a brand from a website (`brands:write`). Body: `{url, name?}`; `url` must be https. Returns 202 `{runId}` |
+| GET | `/v1/brands/generate/{runId}` | Poll: `{status: running\|succeeded\|failed, brandCode?, error?}`. Takes up to about 90 s; kept 24 h; a failed scrape fails the run and saves nothing |
+| GET | `/v1/leads/recent?limit=25&since=` | Newest leads across funnels, newest first (`limit` 1-100): `{email, name, funnelCode, funnelName, createdAt, source}` |
+| GET | `/v1/analytics/funnels?from=&to=` | Per funnel `{funnelCode, name, status, views, leads, conversionRate}`, best first, plus `totals` and `period`. `from`/`to` are `YYYY-MM-DD` UTC; default last 30 days, at most 366. `/v1/funnels/{funnelCode}/analytics` takes the same `from`/`to` |
+| GET | `/v1/custom-domains` | The organization's domains: `hostname, status (pending\|active\|failed), dnsRecord {type: "CNAME", name, target}, sslStatus, lastError, funnelCodes` (`domains:read`) |
+| POST | `/v1/custom-domains` | Add a domain. Body: `{hostname}`; a subdomain you own. Needs a paid plan and an owner or global admin (`domains:write`). Returns the `dnsRecord` to create |
+| POST | `/v1/custom-domains/{hostname}/check` | Re-read its status now; adds `dnsOk` (`domains:read`) |
+| PUT | `/v1/funnels/{funnelCode}/custom-domain` | Body: `{hostname}` or `{hostname: null}`. Attaches an active domain or detaches it; returns `publicUrl`. `409 domain_not_active` until the domain is active |
+
+**Rules**
+- Build a brand only from a website URL the user gave you; never guess one.
+- Report views as **form views** (how often a funnel's lead form was shown), not visitors.
+- Attach or detach a custom domain only when the user asks, and only once the domain is `active`. Tell them the DNS record to add and that checking can take minutes to a day.
+
 ### Blueprints
 
 | Method | Path | Description |

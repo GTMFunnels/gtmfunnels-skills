@@ -120,6 +120,25 @@ curl -s -H "X-API-KEY: $GTMFUNNELS_API_KEY" "${GTMFUNNELS_API_URL:-https://api.g
 
 **Get analytics:** `GET /v1/funnels/{funnelCode}/analytics`
 
+### Brand from a website, recent leads, analytics, custom domains
+
+**Build a brand:** `POST /v1/brands/generate` — Body: `{url, name?}` (`brands:write`; `url` must be https). Returns 202 `{runId}`. Poll `GET /v1/brands/generate/{runId}` for `{status: running|succeeded|failed, brandCode?, error?}` (up to about 90 s; a run is kept 24 h). A website that can't be read fails the run and saves nothing.
+
+**Newest leads:** `GET /v1/leads/recent?limit=25&since=` — newest first (`limit` 1-100); items `{email, name, funnelCode, funnelName, createdAt, source}`.
+
+**Funnel performance:** `GET /v1/analytics/funnels?from=YYYY-MM-DD&to=YYYY-MM-DD` — per funnel `{funnelCode, name, status, views, leads, conversionRate}`, best first, plus `totals` and `period`. Default last 30 days, at most 366. `GET /v1/funnels/{funnelCode}/analytics` takes the same `from`/`to`.
+
+**Custom domains:**
+- `GET /v1/custom-domains` — `hostname, status (pending|active|failed), dnsRecord {type: "CNAME", name, target}, sslStatus, lastError, funnelCodes`.
+- `POST /v1/custom-domains` — Body: `{hostname}`; a subdomain you own. Needs a paid plan and an owner or global admin. Returns the `dnsRecord` to create.
+- `POST /v1/custom-domains/{hostname}/check` — re-read the status now; adds `dnsOk`.
+- `PUT /v1/funnels/{funnelCode}/custom-domain` — Body: `{hostname}` or `{hostname: null}`; attaches an active domain or detaches it, returns `publicUrl`. `409 domain_not_active` until it is active.
+
+**Rules**
+- Build a brand only from a website URL the user gave you; never guess one.
+- Report views as **form views** (how often a funnel's lead form was shown), not visitors.
+- Attach or detach a custom domain only when the user asks, and only once the domain is `active`. Tell them the DNS record to add and that checking can take minutes to a day.
+
 ### Blueprints
 
 **List blueprints:** `GET /v1/blueprints` — Returns available funnel templates (squeeze, leadmagnet, webinar, quiz, sales, etc.)
