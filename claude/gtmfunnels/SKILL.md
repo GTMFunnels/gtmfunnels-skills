@@ -199,6 +199,15 @@ curl -s -X PUT -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Content-Type: application
    Rules (a break is `422 validation_failed`, with `details[].loc` naming the field, e.g. `["body","fields",2,"options"]`): a field `email` of type `email` that is active and `required: true` is always needed; `type` is one of `text`, `email`, `tel`, `textarea`, `select`, `multiselect`, `radio`, `checkbox`, `date`, `number`, `url`; `select`, `multiselect`, `radio` and `checkbox` need `options` (1-50, each up to 100 characters, no commas, no duplicates) and other types take none; a checkbox can't be `required` (use a one-option `radio` for a required consent); a new `name` is snake_case (`^[a-z][a-z0-9_]{0,39}$`), unique, not `utm_params` and not ending `__cc`; at most 30 fields; label up to 200, placeholder up to 150, title and button text up to 100, disclaimer up to 1000 characters; no `<` or `>` in any of that text (plain text only); colours are `#rrggbb`; `redirectType: "custom"` needs an `https://` `redirectUrl`. A field you leave out is switched off if it is one of the default form's fields (`name`, `first_name`, `last_name`, `email`, `mobile`) and removed otherwise. The response's `republish` is `done`, `not_needed` or `failed`; on `failed` the form is saved but published pages may show the old form until republished, so tell the user. Needs `funnels:read` and `funnels:write`.
 4. **Style the card, not the form.** On the page, wrap `<div data-block="lead_form"></div>` in your own element (`.signup-card` with `var(--t-surface)`, padding, a heading). The form's own look comes from its `colors` and `styles`.
 
+## Funnel or Template?
+
+Decide first, before building anything.
+
+- **Build a funnel** (the default) when the user names a specific offer, resource, date or webinar, or asks for a page or funnel to use now. Write real content. See "Building a Funnel".
+- **Design a template** when the user asks for a template, style, theme, design or layout to reuse or keep in the gallery, or to "save this design". Write `{{placeholders}}`. See "Designing a Template".
+- **Ambiguous** (for example "a lead magnet with our brand colours"): ask one question: "Build a funnel now, or a reusable design for your gallery?"
+- In the connector (Claude Desktop or claude.ai) only funnels can be built. Templates are made in Claude Code or with the dashboard's Save as template; say so.
+
 ## Building a Funnel
 
 Three blueprints can be built this way: **AI Chat Landing Page**, **Lead Magnet** and **Webinar Registration**. List them with `GET /v1/blueprints?buildable=true` (each has `owner`, `gtmfunnels` or `organisation`, and `type`, its tier such as Free or Paid) and find the `id` by name; ids differ between environments, so never hard-code one. If two buildable blueprints share a name, ask the user which one they mean, describing them by tier, owner and description, never by id. When you tell the user, name the blueprint, never its id. Needs keys with `funnels:build`, `blueprints:read`, `pages:read`, `pages:write` (plus `funnels:read` and `funnels:write` for the form, `pages:publish` to publish, `knowledge:write` to upload sources).
@@ -223,6 +232,21 @@ curl -s -X POST -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Idempotency-Key: $(uuidg
 7b. **The resource link** (Lead Magnet). Put the customer's resource link on the thank-you page and in the email's button. Never invent a link or leave `href="#"`; if they have none, ask for it.
 8. **Customise the form** if the page has one: read it, propose fields, button text and disclaimer to the user, and `PUT` them as in "Customise the form". This saves at once (it is not a draft); say so. It shows on the live site once the funnel is published.
 9. **Publish only when the user asks.** A preview or draft is not a request to publish. Then `POST /v1/funnels/{code}/pages/{pageId}/publish`, and `POST /v1/funnels/{code}/publish` to make the funnel live. Publish the pages, the email and then the funnel. `POST /v1/funnels/{code}/publish` returns `409 pages_not_written` ("Write these pages before publishing: <names>.") while any page still holds the placeholder from the build: write it first. Never publish on your own. Before regenerating a funnel you built (`POST .../regenerate`), warn the user that it replaces the pages you wrote.
+
+## Designing a Template
+
+A template is a reusable style for the organization's gallery. Needs a secret key with `templates:write` and a paid plan to create a draft and to save. Routes (all under `/v1/templates`): `GET /templates?purpose=` lists active styles; `POST /templates/drafts {purpose, fromTemplate?}` returns `draftCode`, `requiredKeys`, `optionalKeys`; `GET /templates/drafts/{draftCode}` returns pages with `sampleUrl`/`outlineUrl` and `missingKeys`; `PUT /templates/drafts/{draftCode}/pages/{key} {templateHtml, schema, sampleContent}`; `POST /templates/drafts/{draftCode}/save {name}`; `DELETE /templates/drafts/{draftCode}` (204).
+
+Purposes and keys: `lead_magnet` and `webinar_registration` (lp, tp, email); `hosted_webinar` (join, completion; optional lp, live-tp, live-email, reminder-email); `evergreen_webinar` (join, completion; optional live-tp, evergreen-email). `lp` has exactly one `<div data-block="lead_form"></div>` anchor, `join` one webinar join anchor; `tp` and `live-tp` are thank-you pages; email keys follow the email rules (section 9).
+
+1. **Read the rules and the brand.** `GET /v1/page-contract` (section 10 is the template rules, section 9 the email rules), the brand (`GET /v1/brands`), and the purpose's keys from the draft you create.
+2. **Ask clarifying questions** about the look, tone and structure before writing.
+3. **Start a draft** with the purpose. To tweak a saved style, start with `fromTemplate` (its slug).
+4. **Design one email first** and reuse its shell (header, colours, footer, layout) for every email key; only the content placeholders differ. A webinar email may use `{{webinar_personal_url}}`; no other `{{...}}` survives into an email.
+5. **Push page by page.** Each page has `templateHtml` with `{{section_key}}` placeholders, a flat `schema` (key to a one-line description, at most 300 characters, snake_case with a section prefix such as `hero_title`) and `sampleContent` with the same keys, plain text with no markup. Placeholders and schema keys match one to one; `{{asset:...}}` tokens and runtime merge tags are not placeholders. The page filled with its sample content must pass the contract. Content images are placeholders; the logo may be fixed. Image URLs `https://`; links `https://`, `mailto:`, `tel:` or relative; never `data:` or `http:`. Template at most 1 MB. A `422` lists every problem in `details[]` (`msg`, `line`) and stores nothing: fix them all and push again.
+6. **Give the user both preview links** for each page: `sampleUrl` (with sample content) and `outlineUrl` (the placeholders). They last while the draft exists (at most 7 days) and stop working after save or discard. Iterate on feedback by pushing the page again.
+7. **Save only when the user approves**, with a name: `POST .../save`. A `409 template_incomplete` lists missing keys; push them and save again. The result is an active style (`slug`, `themeReady: true`) shown in the org's gallery for blueprints whose pages it covers.
+8. **A saved template never changes.** A tweak starts a new draft with `fromTemplate`. Renaming and deleting are done in the dashboard. Discard an unwanted draft with `DELETE`.
 
 ## Common Workflows
 
