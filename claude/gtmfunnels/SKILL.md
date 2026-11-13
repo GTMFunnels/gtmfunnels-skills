@@ -20,7 +20,7 @@ You have access to the GTMFunnels Developer API. Use it to manage marketing funn
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/funnels?skip=0&limit=20` | List funnels |
-| POST | `/v1/funnels/generate` | Generate funnel from blueprint. Body: `{blueprintId, companyUrl, goal?, funnelName?, returnUrl?}`. Set `returnUrl: true` to wait for completion and get the published URL. |
+| POST | `/v1/funnels/generate` | Generate funnel from blueprint. Body: `{blueprintId, companyUrl?, goal?, funnelName?, designTemplate?, brandCode?, websiteUrls?, sourceUrls?, inputs?, returnUrl?, async?}`. `companyUrl` defaults to the first of `websiteUrls`. Set `returnUrl: true` to wait for completion and get the published URL, or `async: true` for `202 {runId}`. See "Building from a Design Template" |
 | GET | `/v1/funnels/{funnelCode}` | Get funnel details |
 | PUT | `/v1/funnels/{funnelCode}` | Update funnel. Body: `{name?, status?, externalCampaignId?, notes?}` |
 | DELETE | `/v1/funnels/{funnelCode}` | Delete funnel |
@@ -98,6 +98,8 @@ Edit the HTML of a funnel's pages. The live page changes only on publish, and ea
 |--------|------|-------------|
 | GET | `/v1/blueprints` | List available funnel blueprints |
 | GET | `/v1/blueprints/{blueprintId}` | Get blueprint details |
+| GET | `/v1/blueprints?hasTemplates=true` | Only the blueprints that have design templates |
+| GET | `/v1/design-templates?blueprintId=` | A blueprint's design templates `{items: [{id, name, owner}], inputs: [{key, label, required}]}` (`funnels:read`) |
 
 **Talking to the user:** call a blueprint by its name only (for example "AI Chat Landing Page"), in lists, questions, confirmations and summaries. Never show a blueprint id; ids are only for requests.
 
@@ -225,6 +227,8 @@ Decide first, before building anything.
 - **Design a template** when the user asks for a template, style, theme, design or layout to reuse or keep in the gallery, or to "save this design". Write `{{placeholders}}`. See "Designing a Template".
 - **Ambiguous** (for example "a lead magnet with our brand colours"): ask one question: "Build a funnel now, or a reusable design for your gallery?"
 - In the connector (Claude Desktop or claude.ai) only funnels can be built. Templates are made in Claude Code or with the dashboard's Save as template; say so.
+- **Connector tools for template builds:** `list_design_templates` with no blueprint lists the blueprints that have templates; with one, its templates and `inputs`. `generate_funnel_from_template(blueprint, name, goal, design_template, website_urls, brand_code?, source_urls?, inputs?)` starts the build and returns a `runId`; poll `check_funnel_build(run_id)` (regenerations use `check_regeneration`). The finished funnel is live on its default link, as a dashboard build is: tell the user first. The same template vs design-URL rules apply ("Building from a Design Template").
+- **Editing a generated page in the connector:** `get_page` then `save_page_draft` with the whole HTML and the `revision`. Keep `gtm-file:/...` links (the page's own images) exactly as they are, and never save HTML containing `[removed]`. Drafts go live only on publish.
 
 ## Building a Funnel
 
@@ -250,6 +254,22 @@ curl -s -X POST -H "X-API-KEY: $GTMFUNNELS_API_KEY" -H "Idempotency-Key: $(uuidg
 7b. **The resource link** (Lead Magnet). Put the customer's resource link on the thank-you page and in the email's button. Never invent a link or leave `href="#"`; if they have none, ask for it.
 8. **Customise the form** if the page has one: read it, propose fields, button text and disclaimer to the user, and `PUT` them as in "Customise the form". This saves at once (it is not a draft); say so. It shows on the live site once the funnel is published.
 9. **Publish only when the user asks.** A preview or draft is not a request to publish. Then `POST /v1/funnels/{code}/pages/{pageId}/publish`, and `POST /v1/funnels/{code}/publish` to make the funnel live. Publish the pages, the email and then the funnel. `POST /v1/funnels/{code}/publish` returns `409 pages_not_written` ("Write these pages before publishing: <names>.") while any page still holds the placeholder from the build: write it first. Never publish on your own. Before regenerating a funnel you built (`POST .../regenerate`), warn the user that it replaces the pages you wrote.
+
+## Building from a Design Template
+
+Use this when the user names a design template, or asks for a funnel "in our style" or "like the webinar template", and wants GTM Funnels AI to write the content. Needs `blueprints:read`, `funnels:read` and `funnels:write`.
+
+1. **Template blueprints.** `GET /v1/blueprints?hasTemplates=true` lists the blueprints that have design templates (built-in and the organisation's own). They are not the `buildable=true` ones: never send a template build to `/v1/funnels/build`.
+2. **Templates and inputs.** `GET /v1/design-templates?blueprintId=ID` returns `{items: [{id, name, owner: system|org}], inputs: [{key, label, required}]}`. Show the user the names; ask for any required input. The build plan (`GET /v1/blueprints/{id}/build-plan`) does not cover template blueprints. `503 unavailable` means the list couldn't be loaded: try again.
+3. **Build.** `POST /v1/funnels/generate` with `{blueprintId, funnelName, goal, designTemplate: <id>, websiteUrls: [...], brandCode?, sourceUrls?, inputs?, async: true}` and an `Idempotency-Key`. `companyUrl` is optional (the first of `websiteUrls` is used). `inputs` takes only the keys step 2 listed; reserved names (`goal`, `company_url`, `design_template`, `website_urls`, `source_content`, `*_html`, `*_schema`, ...) and unknown names are `422`. An unlisted `designTemplate` is `422` on `designTemplate`; an unknown brand is `404` and creates no funnel.
+4. **Wait.** It returns `202 {runId, funnelCode, status}`. Poll `GET /v1/funnels/generate/{runId}` every 15 seconds until `succeeded` or `failed` (a few minutes).
+5. **Tell the user it is live.** As a build in the dashboard does, a finished build is **live at once** on the funnel's default link. Say so before you start it.
+6. **Edit** its pages as in "Editing a Page": every edit is a draft until the user asks to publish.
+
+**Template or design URL?**
+- A named template: build from the template (above). The look is the template's; the brand's colours and logo come through the funnel theme when `brandCode` is given (an organisation style saved without theme support keeps its own colours).
+- A design URL or screenshot instead: write the pages yourself ("Building a Funnel") and match its look exactly. Take text, images and logos only from the user's own sites and brand, never from the reference site.
+- Both a template and a design URL: ask which to use. A brand and a design URL: ask whether to use the URL's layout with the brand's colours and logo.
 
 ## Designing a Template
 
